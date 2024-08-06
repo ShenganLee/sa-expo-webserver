@@ -6,6 +6,7 @@
   "types": "build/index.d.ts",
   "scripts": {
     "build": "expo-module build",
+    "plugin": "npm run build plugin",
     "clean": "expo-module clean",
     "lint": "expo-module lint",
     "test": "expo-module test",
