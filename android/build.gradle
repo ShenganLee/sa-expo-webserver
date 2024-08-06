@@ -41,3 +41,8 @@ android {
     abortOnError false
   }
 }
+
+dependencies {
+  // implementation fileTree(dir: "libs", include: ["*.aar"])
+  implementation(name: 'gowebserver', ext: 'aar')
+}

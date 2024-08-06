@@ -1,0 +1,8 @@
+framework module "Gowebserver" {
+	header "ref.h"
+    header "Gowebserver.objc.h"
+    header "Universe.objc.h"
+    header "Gowebserver.h"
+
+    export *
+}

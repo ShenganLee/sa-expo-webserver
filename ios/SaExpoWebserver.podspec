@@ -23,5 +23,9 @@ Pod::Spec.new do |s|
     'SWIFT_COMPILATION_MODE' => 'wholemodule'
   }
 
+  s.vendored_framework = 'Frameworks/Gowebserver.xcframework'
   s.source_files = "**/*.{h,m,swift}"
+  s.public_header_files = "*.{h}"
+
+  # s.source_files = "**/*.{h,m,swift}"
 end

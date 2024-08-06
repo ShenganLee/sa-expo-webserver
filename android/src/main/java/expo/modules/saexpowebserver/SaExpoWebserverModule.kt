@@ -1,7 +1,11 @@
 package expo.modules.saexpowebserver
 
+import expo.modules.kotlin.Promise
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
+import expo.modules.kotlin.exception.CodedException
+
+import gowebserver.Gowebserver;
 
 class SaExpoWebserverModule : Module() {
   // Each module class must implement the definition function. The definition consists of components
@@ -13,35 +17,25 @@ class SaExpoWebserverModule : Module() {
     // The module will be accessible from `requireNativeModule('SaExpoWebserver')` in JavaScript.
     Name("SaExpoWebserver")
 
-    // Sets constant properties on the module. Can take a dictionary or a closure that returns a dictionary.
-    Constants(
-      "PI" to Math.PI
-    )
-
-    // Defines event names that the module can send to JavaScript.
-    Events("onChange")
-
-    // Defines a JavaScript synchronous function that runs the native code on the JavaScript thread.
-    Function("hello") {
-      "Hello world! 👋"
-    }
-
     // Defines a JavaScript function that always returns a Promise and whose native code
     // is by default dispatched on the different thread than the JavaScript runtime runs on.
-    AsyncFunction("setValueAsync") { value: String ->
-      // Send an event to JavaScript.
-      sendEvent("onChange", mapOf(
-        "value" to value
-      ))
+    AsyncFunction("start") { fileDir: String, proxyStr: String, promise: Promise ->
+      val addr = Gowebserver.start(fileDir, proxyStr)
+      if (addr.isBlank()) {
+        promise.reject(CodedException("Webserver start failed"))
+      } else {
+        promise.resolve(addr)
+      }
     }
 
-    // Enables the module to be used as a native view. Definition components that are accepted as part of
-    // the view definition: Prop, Events.
-    View(SaExpoWebserverView::class) {
-      // Defines a setter for the `name` prop.
-      Prop("name") { view: SaExpoWebserverView, prop: String ->
-        println(prop)
-      }
+    AsyncFunction("stop") { addr: String, promise: Promise ->
+      Gowebserver.stop(addr)
+      promise.resolve()
+    }
+
+    AsyncFunction("restart") { addr: String, promise: Promise ->
+      Gowebserver.restart(addr)
+      promise.resolve()
     }
   }
 }
