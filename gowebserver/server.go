@@ -4,243 +4,225 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
-	"net/url"
 	"os"
-	"regexp"
 	"time"
 
-	"github.com/vulcand/oxy/v2/forward"
+	"github.com/labstack/echo/v4"
 )
 
-// 获取未被使用的端口
-func GetPort(startPort int) int {
-	if startPort < 80 {
-		startPort = 80
-	}
+var logOut = os.Stdout
+var logger = log.New(os.Stdout, "go-web-server: ", log.LstdFlags)
 
-	for port := startPort; port < 65535; port++ {
-		addr := fmt.Sprintf("localhost:%d", port)
-		listener, err := net.Listen("tcp", addr)
-		if err != nil {
-			// 端口已被使用
-			continue
-		}
-		// 立即关闭监听，不进行实际的监听
-		listener.Close()
-		return port
-	}
+type Config struct {
+	IsRunning    bool
+	ServerUrl    string
+	ServerConfig *ServerConfig
 
-	return 0
+	logFile string
+
+	echo *echo.Echo
 }
 
-func isBlabk(str string) bool {
-	if len(str) == 0 {
-		return true
-	}
-
-	pattern := "^\\s*$"
-	regexp := regexp.MustCompile(pattern)
-	return regexp.MatchString(str)
+func (c *Config) Reset() {
+	config.IsRunning = false
+	config.ServerUrl = ""
+	config.echo = nil
 }
 
-func fileExists(filePath string) bool {
-	_, err := os.Stat(filePath)
-	return err == nil || os.IsExist(err)
-}
+func newConfig() *Config {
+	return &Config{
+		IsRunning:    false,
+		ServerUrl:    "",
+		ServerConfig: nil,
 
-type Proxy struct {
-	Path    string   `json:"Path"`
-	Target  string   `json:"Target"`
-	Include []string `json:"Include"`
-	Exclude []string `json:"Exclude"`
-}
+		logFile: "",
 
-func noCacheHandle(w http.ResponseWriter) {
-	// 设置HTTP头部，告知不缓存响应
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("Pragma", "no-cache")
-}
-
-func mainHandlerFunc(w http.ResponseWriter, r *http.Request, dir http.Dir, h http.Handler) {
-	noCacheHandle(w)
-
-	if r.URL.Path == "/" {
-		h.ServeHTTP(w, r)
-		return
-	}
-
-	isExist := fileExists(string(dir) + r.URL.Path)
-
-	// 静态文件处理
-	if isExist {
-		h.ServeHTTP(w, r)
-	} else {
-		// 反向代理到 '/' 目录 兼容前端路由
-		r2 := new(http.Request)
-		*r2 = *r
-		r2.URL = new(url.URL)
-		*r2.URL = *r.URL
-		r2.URL.Path = "/"
-		r2.URL.RawPath = "/"
-		h.ServeHTTP(w, r2)
+		echo: nil,
 	}
 }
 
-var webServerClosePath = "/go-web-server-close"
-var webServerRestartPath = "/go-web-server-restart"
+var config = newConfig()
+var healthPath = "/go-web-server-health"
 
-func generateProxyServer(port int, fileDir string, proxys []Proxy) {
-	mux := http.NewServeMux()
+func Start(serverConfigStr string) string {
+	logger.Println("Function: Start")
 
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	server := &http.Server{
-		Addr:    addr,
-		Handler: mux,
-	}
-
-	useFileServer := !isBlabk(fileDir)
-	log.Printf("\nuseFileServer: %v\n", useFileServer)
-	var (
-		httpDir    http.Dir
-		fileServer http.Handler
-	)
-
-	closed := false
-	fmt.Printf("\nserver closed: %v\n", closed)
-
-	mux.Handle(webServerClosePath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		closed = true
-		server.Close()
-	}))
-
-	mux.Handle(webServerRestartPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		closed = false
-		server.Close()
-	}))
-
-	if len(proxys) > 0 {
-		fwd := forward.New(false)
-		fwd.Transport = &http.Transport{
-			Proxy: http.ProxyFromEnvironment,
-			DialContext: (&net.Dialer{
-				Timeout:   30 * time.Second,
-				KeepAlive: 30 * time.Second,
-			}).DialContext,
-			ForceAttemptHTTP2:     true,
-			MaxIdleConns:          100,
-			IdleConnTimeout:       90 * time.Second,
-			TLSHandshakeTimeout:   10 * time.Second,
-			ExpectContinueTimeout: 1 * time.Second,
-
-			MaxIdleConnsPerHost: 100,
-		}
-
-		for _, p := range proxys {
-			target, err := url.Parse(p.Target)
-			if err != nil {
-				log.Printf("url.Parse Error: %s\n", p.Target)
-				break
+	if config.IsRunning {
+		for {
+			if config.IsRunning && !isBlabk(config.ServerUrl) {
+				return config.ServerUrl
 			}
 
-			// http.Handle(p.Path, proxy)
-			// http.Handle(p.Path, http.StripPrefix(p.Path, proxy))
-
-			mux.Handle(p.Path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				urlPath := r.URL.Path
-
-				if p.Include != nil && len(p.Include) > 0 {
-					for _, include := range p.Include {
-
-						regex, err := regexp.Compile(include)
-						if err != nil {
-							continue
-						}
-
-						if regex.MatchString(urlPath) {
-							fmt.Printf("proxy: %s, target: %s\n", urlPath, p.Target)
-							r.URL = target
-							fwd.ServeHTTP(w, r)
-							return
-						}
-					}
-				}
-
-				if useFileServer && p.Exclude != nil && len(p.Exclude) > 0 {
-					for _, exclude := range p.Exclude {
-
-						regex, err := regexp.Compile(exclude)
-						if err != nil {
-							// fmt.Printf("\nExclude Compile Error: %v\n", err)
-							continue
-						}
-
-						// fmt.Printf("\n%s MatchString %s: %v\n", exclude, urlPath, regex.MatchString(urlPath))
-
-						if regex.MatchString(urlPath) {
-							log.Printf("exclude path: %s\n", urlPath)
-							mainHandlerFunc(w, r, httpDir, fileServer)
-							return
-						}
-					}
-				}
-
-				log.Printf("proxy: %s, target: %s\n", urlPath, p.Target)
-				r.URL = target
-				fwd.ServeHTTP(w, r)
-			}))
-
+			if !config.IsRunning {
+				break
+			}
 		}
 	}
 
-	if useFileServer {
-		httpDir = http.Dir(fileDir)
-		fileServer = http.FileServer(httpDir)
-
-		mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// fmt.Printf("path: %s\n", r.URL.Path)
-			mainHandlerFunc(w, r, httpDir, fileServer)
-		}))
-
-		// http.Handle("/", http.FileServer(http.Dir(fileDir)))
-	}
-
-	// server.ListenAndServe()
-	// if !closed {
-	// 	generateProxyServer(port, fileDir, proxys)
-	// }
-
-	go func() {
-		server.ListenAndServe()
-		if !closed {
-			generateProxyServer(port, fileDir, proxys)
-		}
-	}()
-}
-
-func Start(fileDir string, proxyStr string) string {
-	var proxys []Proxy
-	if !isBlabk(proxyStr) {
-		json.Unmarshal([]byte(proxyStr), &proxys)
-	}
-
-	port := GetPort(9527)
-	if port == 0 {
+	if isBlabk(serverConfigStr) {
 		return ""
 	}
 
-	// go generateProxyServer(port, fileDir, proxys)
-	// time.Sleep(200 * time.Millisecond) // 延迟200 毫秒
-	generateProxyServer(port, fileDir, proxys)
+	var serverConfig ServerConfig
+	json.Unmarshal([]byte(serverConfigStr), &serverConfig)
 
-	return fmt.Sprintf("http://127.0.0.1:%d", port)
+	if serverConfig.Port == 0 {
+		port := findAvailablePort()
+		if port < 0 {
+			return ""
+		}
+		serverConfig.Port = port
+	}
+
+	config.ServerConfig = &serverConfig
+
+	generateServer()
+
+	return config.ServerUrl
 }
 
-func Stop(addr string) {
-	http.Get(addr + webServerClosePath)
+func Stop() {
+	logger.Println("Function: Stop")
+
+	echo := config.echo
+
+	config = newConfig()
+
+	if echo != nil {
+		echo.Close()
+	}
 }
 
-func Restart(addr string) {
-	http.Get(addr + webServerRestartPath)
+func Restart() {
+	logger.Println("Function: Restart")
+
+	if config.IsRunning {
+		for {
+			if config.IsRunning && !isBlabk(config.ServerUrl) {
+				break
+			}
+		}
+
+		if config.echo != nil {
+			config.echo.Close()
+		}
+
+		config.Reset()
+
+		generateServer()
+	}
+}
+
+func IsRunning() bool {
+	logger.Println("Function: IsRunning")
+
+	return config.IsRunning
+}
+
+func ServerUrl() string {
+	logger.Println("Function: ServerUrl")
+
+	return config.ServerUrl
+}
+
+func Healthy() bool {
+	logger.Println("Function: Healthy")
+
+	if !config.IsRunning {
+		return false
+	}
+
+	client := &http.Client{}
+	req, eeqErr := http.NewRequest("GET", config.ServerUrl+healthPath, nil)
+	if eeqErr != nil {
+		return false
+	}
+
+	resp, respErr := client.Do(req)
+	if respErr != nil {
+		return false
+	}
+
+	return resp.StatusCode == http.StatusOK
+}
+
+func SetLogFile(logFile string) {
+	if isBlabk(logFile) {
+		return
+	}
+
+	file, err := os.OpenFile(logFile, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		logger.Fatalf("Failed to open log file: %v", err)
+	}
+	// defer file.Close()
+
+	config.logFile = logFile
+	logOut = file
+
+	// 设置日志的标准输出为文件
+	logger.SetOutput(file)
+	logger.Println("Log entry written to file " + logFile)
+	logger.Println("Function: SetLogFile")
+}
+
+func LogFileClose() {
+	if logOut != os.Stdout {
+		logOut.Close()
+		logOut = os.Stdout
+	}
+	config.logFile = ""
+}
+
+func generateServer() {
+	config.IsRunning = true
+	config.echo = echo.New()
+
+	// health
+	config.echo.GET(healthPath, func(c echo.Context) error {
+		return c.NoContent(http.StatusOK)
+	})
+
+	// Proxys
+	config.ServerConfig.Proxys.Add(config.echo)
+
+	// Routes
+	config.ServerConfig.Routers.Add(config.echo)
+
+	ch := make(chan bool, 2)
+
+	go func() {
+		err := config.echo.Start(fmt.Sprintf(":%d", config.ServerConfig.Port))
+
+		logger.Println("server start err", err)
+
+		if ch != nil && err != nil {
+			config.Reset()
+			ch <- true
+			close(ch)
+		}
+
+	}()
+
+	for {
+		time.Sleep(100 * time.Millisecond)
+		if config.IsRunning {
+			config.ServerUrl = fmt.Sprintf("http://127.0.0.1:%d", config.ServerConfig.Port)
+			if ch != nil {
+				ch <- true
+				close(ch)
+			}
+			break
+		}
+	}
+
+	for v := range ch {
+		if v {
+			ch = nil
+			break
+		}
+	}
+
+	logger.Println("server start end", config.IsRunning, config.ServerUrl)
 }

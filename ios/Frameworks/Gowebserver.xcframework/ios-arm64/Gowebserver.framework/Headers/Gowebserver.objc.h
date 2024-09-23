@@ -11,7 +11,66 @@
 #include "Universe.objc.h"
 
 
+@class GowebserverAddHeaders;
+@class GowebserverConfig;
+@class GowebserverHeader;
+@class GowebserverIndexHeaders;
 @class GowebserverProxy;
+@class GowebserverRouter;
+@class GowebserverServerConfig;
+
+@interface GowebserverAddHeaders : NSObject <goSeqRefInterface> {
+}
+@property(strong, readonly) _Nonnull id _ref;
+
+- (nonnull instancetype)initWithRef:(_Nonnull id)ref;
+- (nonnull instancetype)init;
+@property (nonatomic) NSString* _Nonnull regex;
+// skipped field AddHeaders.Headers with unsupported type: map[string]string
+
+// skipped method AddHeaders.Add with unsupported parameter or return types
+
+@end
+
+@interface GowebserverConfig : NSObject <goSeqRefInterface> {
+}
+@property(strong, readonly) _Nonnull id _ref;
+
+- (nonnull instancetype)initWithRef:(_Nonnull id)ref;
+- (nonnull instancetype)init;
+@property (nonatomic) BOOL isRunning;
+@property (nonatomic) NSString* _Nonnull serverUrl;
+@property (nonatomic) GowebserverServerConfig* _Nullable serverConfig;
+- (void)reset;
+@end
+
+@interface GowebserverHeader : NSObject <goSeqRefInterface> {
+}
+@property(strong, readonly) _Nonnull id _ref;
+
+- (nonnull instancetype)initWithRef:(_Nonnull id)ref;
+- (nonnull instancetype)init;
+// skipped field Header.RequestHeaders with unsupported type: []shenganlee.com/gowebserver.AddHeaders
+
+// skipped field Header.ResponseHeaders with unsupported type: []shenganlee.com/gowebserver.AddHeaders
+
+// skipped method Header.Add with unsupported parameter or return types
+
+@end
+
+@interface GowebserverIndexHeaders : NSObject <goSeqRefInterface> {
+}
+@property(strong, readonly) _Nonnull id _ref;
+
+- (nonnull instancetype)initWithRef:(_Nonnull id)ref;
+- (nonnull instancetype)init;
+// skipped field IndexHeaders.RequestHeaders with unsupported type: map[string]string
+
+// skipped field IndexHeaders.ResponseHeaders with unsupported type: map[string]string
+
+// skipped method IndexHeaders.Add with unsupported parameter or return types
+
+@end
 
 @interface GowebserverProxy : NSObject <goSeqRefInterface> {
 }
@@ -21,21 +80,53 @@
 - (nonnull instancetype)init;
 @property (nonatomic) NSString* _Nonnull path;
 @property (nonatomic) NSString* _Nonnull target;
-// skipped field Proxy.Include with unsupported type: []string
+// skipped field Proxy.Skipper with unsupported type: shenganlee.com/gowebserver.Skipper
 
-// skipped field Proxy.Exclude with unsupported type: []string
+// skipped field Proxy.Headers with unsupported type: shenganlee.com/gowebserver.Headers
 
 @end
 
-/**
- * 获取未被使用的端口
- */
-FOUNDATION_EXPORT long GowebserverGetPort(long startPort);
+@interface GowebserverRouter : NSObject <goSeqRefInterface> {
+}
+@property(strong, readonly) _Nonnull id _ref;
 
-FOUNDATION_EXPORT void GowebserverRestart(NSString* _Nullable addr);
+- (nonnull instancetype)initWithRef:(_Nonnull id)ref;
+- (nonnull instancetype)init;
+@property (nonatomic) NSString* _Nonnull path;
+@property (nonatomic) NSString* _Nonnull filePath;
+// skipped field Router.Headers with unsupported type: shenganlee.com/gowebserver.Headers
 
-FOUNDATION_EXPORT NSString* _Nonnull GowebserverStart(NSString* _Nullable fileDir, NSString* _Nullable proxyStr);
+// skipped field Router.IndexHeaders with unsupported type: shenganlee.com/gowebserver.IndexHeaders
 
-FOUNDATION_EXPORT void GowebserverStop(NSString* _Nullable addr);
+@end
+
+@interface GowebserverServerConfig : NSObject <goSeqRefInterface> {
+}
+@property(strong, readonly) _Nonnull id _ref;
+
+- (nonnull instancetype)initWithRef:(_Nonnull id)ref;
+- (nonnull instancetype)init;
+@property (nonatomic) long port;
+// skipped field ServerConfig.Proxys with unsupported type: shenganlee.com/gowebserver.Proxys
+
+// skipped field ServerConfig.Routers with unsupported type: shenganlee.com/gowebserver.Routers
+
+@end
+
+FOUNDATION_EXPORT BOOL GowebserverHealthy(void);
+
+FOUNDATION_EXPORT BOOL GowebserverIsRunning(void);
+
+FOUNDATION_EXPORT void GowebserverLogFileClose(void);
+
+FOUNDATION_EXPORT void GowebserverRestart(void);
+
+FOUNDATION_EXPORT NSString* _Nonnull GowebserverServerUrl(void);
+
+FOUNDATION_EXPORT void GowebserverSetLogFile(NSString* _Nullable logFile);
+
+FOUNDATION_EXPORT NSString* _Nonnull GowebserverStart(NSString* _Nullable serverConfigStr);
+
+FOUNDATION_EXPORT void GowebserverStop(void);
 
 #endif

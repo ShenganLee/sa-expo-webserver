@@ -13,89 +13,100 @@ package gowebserver
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/signal"
+	"syscall"
 	"testing"
+	"time"
 )
 
+// func TestServer1(t *testing.T) {
+// 	regex := regexp.MustCompile(`^/studio_api/(((publish_site|uploads)/.*)|public_components_manifest.json)$`)
+// 	fmt.Printf("%v", regex.MatchString("/studio_api/check_iot_token"))
+// }
+
 func TestServer(t *testing.T) {
+	// log.Println(getTime())
 	// Run the server.
-	// proxys := []Proxy{
-	// 	// {"path": "/", "target": "https://studio.jowocloud.com"},
-	// 	// {"/minio/", "http://192.168.3.167:18400"},
-	// 	{Path: "/minio/", Target: "http://lab.jowoiot.com:18400"},
-	// 	{Path: "/websocket/", Target: "http://lab.jowoiot.com:18400"},
-	// 	{Path: "/jowoiot-adapter/", Target: "http://lab.jowoiot.com:18400"},
-	// 	{Path: "/jowoiot-proxy/", Target: "http://lab.jowoiot.com:18400"},
-	// 	{
-	// 		Path:    "/studio_api/",
-	// 		Target:  "http://lab.jowoiot.com:18400",
-	// 		Exclude: []string{`^/studio_api/(((publish_site|uploads)/.*)|public_components_manifest.json)$`},
+	serverConfig := &ServerConfig{
+		Proxys: Proxys{
+			{Path: "/cdn/", Target: "http://www.app.rc-ess.com"},
+			{Path: "/minio/", Target: "http://www.app.rc-ess.com"},
+			{Path: "/websocket/", Target: "http://www.app.rc-ess.com"},
+			{Path: "/jowoiot-adapter/", Target: "http://www.app.rc-ess.com"},
+			{Path: "/jowoiot-proxy/", Target: "http://www.app.rc-ess.com"},
+			{
+				Path:    "/studio_api/",
+				Target:  "http://www.app.rc-ess.com",
+				Skipper: []string{`^/studio_api/(((publish_site|uploads)/.*)|public_components_manifest.json)$`},
+			},
+		},
+		Routers: Routers{
+			{
+				Path:     "/",
+				FilePath: "./web",
+				IndexHeaders: IndexHeaders{
+					ResponseHeaders: map[string]string{
+						"Cache-Control": "no-store",
+						"Pragma":        "no-cache",
+					},
+				},
+			},
+		},
+	}
+
+	// SetLogFile("./server.log")
+
+	// serverConfig := &ServerConfig{
+	// 	Proxys: Proxys{
+	// 		{Path: "/", Target: "http://lab.jowoiot.com:18308"},
 	// 	},
 	// }
 
-	// proxyConfig := []ProxyConfig{{
-	// 	Targets: []string{"http://lab.jowoiot.com:18400"},
-	// 	Rewrite: map[string]string{
-	// 		"^/minio/*":           "/minio/$1",
-	// 		"^/websocket/*":       "/websocket/$1",
-	// 		"^/jowoiot-adapter/*": "/jowoiot-adapter/$1",
-	// 		"^/jowoiot-proxy/*":   "/jowoiot-proxy/$1",
-	// 	},
-	// 	Include: []string{`^/(minio|websocket|jowoiot-adapter|jowoiot-proxy)/.*$`},
-	// 	Exclude: []string{`^/studio_api/(((publish_site|uploads)/.*)|public_components_manifest.json)$`},
-	// }}
-
-	proxys := []Proxy{
-		{Path: "/", Target: "http://47.237.20.177"},
-	}
-
-	dataType, err := json.Marshal(proxys)
-	// dataType, err := json.Marshal(proxyConfig)
+	dataType, err := json.Marshal(serverConfig)
 	if err != nil {
 		return
 	}
 
 	dataString := string(dataType)
-	// fmt.Printf("dataString: %s\n", dataString)
-	// addr := Start("./web", dataString)
-	addr := Start("", dataString)
+	addr := Start(dataString)
 
-	// addr := Start("", dataString)
+	// fmt.Printf("dataString: %s\n", dataString)
+	// addr := Start(dataString)
+
+	// addr := Start("{\"Proxys\":[{\"Path\":\"/\",\"Target\":\"http://lab.jowoiot.com:18308\"}]}")
 
 	fmt.Printf("启动服务: %s\n", addr)
 
-	// go func() {
-	// var res string
-	// fmt.Print("是否继续：y/n")
-	// fmt.Scan(&res)
+	go func() {
+		time.Sleep(3 * time.Second)
+		// Restart()
+		logger.Println("Healthy", Healthy())
+		logger.Println("IsRunning", IsRunning())
+		logger.Println("ServerUrl", ServerUrl())
+		// time.Sleep(10 * time.Second)
+		// Stop()
+	}()
 
-	// if res == "y" {
-	// 	Stop(addr)
-	// }
-	// }()
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	for {
+		select {
+		case sig := <-sigc:
+			// log.Printf("Received signal: %s", sig.String())
+			switch sig {
+			case syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGINT:
+				// log.Println("close server...")
+				return
+			case syscall.SIGHUP:
+				// 这里可以添加配置文件重新加载逻辑
+				// log.Println("Reloading server configuration...")
+				// return
+			}
+		default:
+			// 这里可以添加其他守护进程逻辑，例如健康检查、日志记录等
+			time.Sleep(1 * time.Second)
+		}
+	}
 }
-
-// func TestServer1(t *testing.T) {
-// 	// regex, err := regexp.Compile(`/publish_site/`)
-// 	regex, err := regexp.Compile("^/studio_api/(((publish_site|uploads)/.*)|public_components_manifest.json)$")
-
-// 	if err != nil {
-// 		panic(err)
-// 	}
-
-// 	s1 := "/studio_api/publish_site/publish_site_info.json"
-// 	f1 := regex.MatchString(s1)
-// 	fmt.Printf("s1: %v\n", f1)
-
-// 	s2 := "/studio_api/uploads/public_component_package/1/1715840926/_-_-index-js.59c431e6.chunk.js"
-// 	f2 := regex.MatchString(s2)
-// 	fmt.Printf("s2: %v\n", f2)
-
-// 	s3 := "/studio_api/public_components_manifest.json"
-// 	f3 := regex.MatchString(s3)
-// 	fmt.Printf("s3: %v\n", f3)
-
-// 	s4 := "/studio_api/publish_site1/aaa.txt"
-// 	f4 := regex.MatchString(s4)
-// 	fmt.Printf("s4: %v\n", f4)
-
-// }

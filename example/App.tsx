@@ -1,4 +1,4 @@
-import { WebServer } from "@sa/expo-webserver";
+import * as WebServer from "@sa/expo-webserver";
 import { useState, useEffect } from "react";
 import { StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
@@ -7,16 +7,14 @@ export default function App() {
   const [uri, setUri] = useState("");
 
   useEffect(() => {
-    const server = new WebServer();
+    const uri = WebServer.start({
+      Proxys: [{ Path: "/", Target: "https://baidu.com" }],
+    });
 
-    server
-      .start("", [{ Path: "/", Target: "https://baidu.com" }])
-      .then((uri) => {
-        setUri(uri);
-      });
+    setUri(uri);
 
     return () => {
-      server.destory();
+      WebServer.stop();
     };
   }, []);
   return (
